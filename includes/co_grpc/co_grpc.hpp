@@ -269,6 +269,9 @@ namespace co_grpc {
                 if (_item->destroy_) {
                     _item->proceed();
                     return;
+
+                } else if (!_item) {
+                    return;
                 }
 
                 auto current = writer_.load(std::memory_order_relaxed);
