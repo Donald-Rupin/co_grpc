@@ -64,17 +64,50 @@ namespace co_grpc {
 
                     request(grpc_service& _service)
                         : service_(_service), next_(nullptr), destroy_(false)
+                    { }
+
+                    virtual ~request(){};
+
+                    void
+                    proceed()
                     {
-                        assign(service_);
+                        if (!destroy_)
+                        {
+                            clone();
+
+                            process();
+                        }
+                        else
+                        {
+                            destroy();
+                        }
                     }
 
-                    virtual ~request();
+                    inline void
+                    complete() noexcept
+                    {
+                        destroy_ = true;
+                    }
+
+                    inline grpc_service&
+                    server() noexcept
+                    {
+                        return service_;
+                    }
+
+                    inline grpc::ServerContext&
+                    context() noexcept
+                    {
+                        return ctx_;
+                    }
+
+                private:
 
                     virtual void
-                    assign(grpc_service& _queue) = 0;
+                    process() = 0;
 
                     virtual void
-                    process(grpc_service& _queue) = 0;
+                    clone() = 0;
 
                     virtual void
                     destroy()
@@ -82,40 +115,18 @@ namespace co_grpc {
                         delete this;
                     }
 
-                    void
-                    complete()
-                    {
-                        destroy_ = true;
-                    }
-
-                private:
-
                     grpc_service& service_;
+
+                    grpc::ServerContext ctx_;
 
                     request* next_;
 
                     bool destroy_;
-
-                    void
-                    proceed()
-                    {
-                        if (!destroy_)
-                        {
-                            process(service_);
-
-                            service_.queue(this);
-
-                            destroy_ = true;
-                        }
-                        else
-                        {
-                            destroy();
-                        }
-                    }
             };
 
             template <typename... Args>
-            grpc_service(Args&&... _args) : executer_(std::forward<Args>(_args)...)
+            grpc_service(Args&&... _args)
+                : executer_(std::forward<Args>(_args)...), writer_(nullptr), reader_(nullptr)
             { }
 
             ~grpc_service() = default;
@@ -125,10 +136,10 @@ namespace co_grpc {
             build(std::string_view _address, Creds&& cred)
             {
                 grpc::ServerBuilder builder;
-                builder.AddListeningPort(_address.c_str(), std::forward<Creds>(cred));
-                builder.RegisterAsyncService(&service_);
-                auto cq     = builder.AddCompletionQueue();
-                auto server = builder.BuildAndStart();
+                builder.AddListeningPort(_address.data(), std::forward<Creds>(cred));
+                builder.RegisterService(&service_);
+                cq_     = builder.AddCompletionQueue();
+                server_ = builder.BuildAndStart();
             }
 
             void
@@ -168,22 +179,20 @@ namespace co_grpc {
                     std::coroutine_handle<>
                     await_suspend(std::coroutine_handle<> _awaiter) noexcept
                     {
-                    	void* empty = nullptr;
-                    	bool s = self_->writer_.compare_exchange_strong(
-                    			empty,
-                    			_awaiter.address & kLockFlag,
-                    			std::memory_order_acquire,
-                    			std::memory_order_acquire
-                    		);
+                        void* empty = nullptr;
+                        bool  s     = self_->writer_.compare_exchange_strong(
+                            empty,
+                            reinterpret_cast<void*>(
+                                reinterpret_cast<std::uintptr_t>(_awaiter.address()) | kLockFlag),
+                            std::memory_order_acquire,
+                            std::memory_order_acquire);
 
-                    	if (!s) {
+                        if (!s) { return _awaiter; }
+                        else
+                        {
 
-                    		return _awaiter;
-
-                    	} else {
-
-                    		return std::noop_coroutine_handle;
-                    	}
+                            return std::noop_coroutine();
+                        }
                     }
 
                     bool
@@ -224,7 +233,7 @@ namespace co_grpc {
                     grpc_service* self_;
             };
 
-            await_proxy operator co_await() noexcept;
+            await_proxy operator co_await() noexcept { return await_proxy{this}; }
 
         private:
 
@@ -248,6 +257,8 @@ namespace co_grpc {
                         // tells us whether there is any kind of event or cq_ is shutting down.
                         GPR_ASSERT(cq_->Next(&tag, &ok));
                         GPR_ASSERT(ok);
+
+                        queue((request*) tag);
                     }
                 }
             }
@@ -255,17 +266,23 @@ namespace co_grpc {
             void
             queue(request* _item)
             {
+                if (_item->destroy_) {
+                    _item->proceed();
+                    return;
+                }
+
                 auto current = writer_.load(std::memory_order_relaxed);
                 do
                 {
                     if (current)
                     {
-
                         const auto address = reinterpret_cast<std::uintptr_t>(current);
 
                         if (address & kLockFlag)
                         {
-                            auto handle = writer_.exchange(_item, std::memory_order_release);
+
+                            _item->next_ = nullptr;
+                            writer_.store(_item, std::memory_order_release);
 
                             executer_.execute(reinterpret_cast<void*>(address & ~kLockFlag));
 
@@ -281,7 +298,7 @@ namespace co_grpc {
                         _item->next_ = nullptr;
                     }
 
-                } while (writer_.compare_exchange_weak(
+                } while (!writer_.compare_exchange_weak(
                     current,
                     _item,
                     std::memory_order_release,
@@ -302,7 +319,7 @@ namespace co_grpc {
             static constexpr std::uintptr_t kLockFlag = 0b1;
 
             std::atomic<void*> writer_;
-            Waiting*           reader_;
+            request*           reader_;
 
             std::unique_ptr<grpc::ServerCompletionQueue> cq_;
 
