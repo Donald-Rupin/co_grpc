@@ -107,6 +107,9 @@ namespace co_grpc {
                     process() = 0;
 
                     virtual void
+                    error(){};
+
+                    virtual void
                     clone() = 0;
 
                     virtual void
@@ -256,9 +259,13 @@ namespace co_grpc {
                         // The return value of Next should always be checked. This return value
                         // tells us whether there is any kind of event or cq_ is shutting down.
                         GPR_ASSERT(cq_->Next(&tag, &ok));
-                        GPR_ASSERT(ok);
 
-                        queue((request*) tag);
+                        if (ok) { queue((request*) tag); }
+                        else
+                        {
+
+                            ((request*) tag)->error();
+                        }
                     }
                 }
             }
@@ -266,11 +273,13 @@ namespace co_grpc {
             void
             queue(request* _item)
             {
-                if (_item->destroy_) {
+                if (_item->destroy_)
+                {
                     _item->proceed();
                     return;
-
-                } else if (!_item) {
+                }
+                else if (!_item)
+                {
                     return;
                 }
 
