@@ -63,7 +63,7 @@ namespace co_grpc {
                 public:
 
                     request(grpc_service& _service)
-                        : service_(_service), next_(nullptr), destroy_(false)
+                        : service_(_service), next_(nullptr), destroy_(kNew)
                     { }
 
                     virtual ~request(){};
@@ -73,7 +73,11 @@ namespace co_grpc {
                     {
                         if (!destroy_)
                         {
-                            clone();
+                            if (state_ == kNew)
+                            {
+                                clone();
+                                state_ = kProcessing;
+                            }
 
                             process();
                         }
@@ -86,7 +90,7 @@ namespace co_grpc {
                     inline void
                     complete() noexcept
                     {
-                        destroy_ = true;
+                        state_ = kDestory;
                     }
 
                     inline grpc_service&
@@ -107,7 +111,9 @@ namespace co_grpc {
                     process() = 0;
 
                     virtual void
-                    error(){};
+                    error(){
+                        destroy();
+                    };
 
                     virtual void
                     clone() = 0;
@@ -124,7 +130,13 @@ namespace co_grpc {
 
                     request* next_;
 
-                    bool destroy_;
+                    enum State {
+                        kNew,
+                        kProcessing,
+                        kDestory
+                    };
+
+                    State state_;
             };
 
             template <typename... Args>
@@ -273,12 +285,7 @@ namespace co_grpc {
             void
             queue(request* _item)
             {
-                if (_item->destroy_)
-                {
-                    _item->proceed();
-                    return;
-                }
-                else if (!_item)
+                if (!_item)
                 {
                     return;
                 }
