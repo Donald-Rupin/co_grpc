@@ -2,7 +2,7 @@
 
 An coroutine wrapper for gRPC. This repository provides a header only library for converting the gerneral format of running an asynchronous gRPC service (as show in the [example](https://grpc.io/docs/languages/cpp/async/)) to a `co_await`'able thread safe object. 
 
-This implementation differs to things like `[asio-grpc](https://github.com/Tradias/asio-grpc)` as this library is coroutine/executor agnostic. Instead of modeling each request as a coroutine or fibers of execution, co_grpc converts the gerneral architecture of async grpc into an co_await'able type. All you need to do is `co_await` incoming requests then you can handle them in any way you want.
+This implementation differs to things like [asio-grpc](https://github.com/Tradias/asio-grpc) as this library is coroutine/executor agnostic. Instead of modeling each request as a coroutine or fibers of execution, co_grpc converts the gerneral architecture of async grpc into an co_await'able type. All you need to do is `co_await` incoming requests then you can handle them in any way you want.
 
 ## Usage 
 
@@ -26,7 +26,8 @@ service.run();
 
 std::cout << "Service is running!" << "\n";
 # now your service is running
-```c++
+```
+
 For example "<ip|hostname>:<port>" can be "localhost:5051". <some grpc credentialing system> can be what ever security mode you want to run in (unsecured, ssl, ...). For example either `grpc::InsecureServerCredentials` or `grpc::SslServerCredentials`.
 
 To process incoming messages you can run the simple loop:
@@ -70,7 +71,7 @@ struct grpc_executor {
 The library is designed to have one class per `rpc` call. These classes need to inherit from `example_service::request` (a nested class type). Again the usage is pretty similar to that shown in `[grpc example](https://grpc.io/docs/languages/cpp/async/`. 
 
 `request` provides the following interface:
-
+```c++
 /*
  * Do the next thing required. This will either be process some application logic,
  * all clean up this object. Calling this function may invalidate the object. 
@@ -99,6 +100,7 @@ server() noexcept;
  */
 inline grpc::ServerContext&
 context() noexcept;
+```
 
 `request` has the following pure virtual functions:
 
@@ -187,10 +189,10 @@ struct bad_executor {
     void
     execute(void* _object)
     {
-        std::coroutine_handle<>::from_address(_object)
+        std::coroutine_handle<>::from_address(_object).resume();
     }
 };
-
+```
 
 Our service alias.
 ```c++
