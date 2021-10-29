@@ -68,7 +68,7 @@ struct grpc_executor {
 
 ## Message Inheritance.
 
-The library is designed to have one class per `rpc` call. These classes need to inherit from `example_service::request` (a nested class type). Again the usage is pretty similar to that shown in `[grpc example](https://grpc.io/docs/languages/cpp/async/`. 
+The library is designed to have one class per `rpc` call. These classes need to inherit from `example_service::request` (a nested class type). Again the usage is pretty similar to that shown in [grpc example](https://grpc.io/docs/languages/cpp/async/. 
 
 `request` provides the following interface:
 ```c++
