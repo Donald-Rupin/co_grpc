@@ -28,7 +28,7 @@ std::cout << "Service is running!" << "\n";
 # now your service is running
 ```
 
-For example "<ip|hostname>:<port>" can be "localhost:5051". <some grpc credentialing system> can be what ever security mode you want to run in (unsecured, ssl, ...). For example either `grpc::InsecureServerCredentials` or `grpc::SslServerCredentials`.
+For example `<ip|hostname>:<port>` can be `localhost:5051`. `<some grpc credentialing system>` can be what ever security mode you want to run in (unsecured, ssl, ...). For example either `grpc::InsecureServerCredentials` or `grpc::SslServerCredentials`.
 
 To process incoming messages you can run the simple loop:
 ```c++
@@ -45,7 +45,7 @@ while (true)
 See [Message Inheritance](#Message-Inheritance) for more details about `example_service::request`.
 
 ## Coroutine Executor
-`co_await service` will not suspend if there is a request waiting, but will if there is not. In the case that `co_await service;` suspends, co_grpc needs a way to resume the suspended coroutine and hopefully leaving the co_grpc context. The user must provide an `Executor` to do so. In this library an `Executor` is simply some object callable with `void*`. The `void*` is the memory region of the coroutine where the coroutine handle can be accessed through `coroutine_handle<>::from_address()`.
+`co_await service` will suspend if there is no request waiting. In the case that `co_await service;` suspends, co_grpc needs a way to resume the suspended coroutine and hopefully leaving the co_grpc context. The user must provide an `Executor` to do so. In this library an `Executor` is simply some object callable with `void*`. The `void*` is the memory region of the coroutine where the coroutine handle can be accessed through `coroutine_handle<>::from_address()`.
 
 The Executor will be called in the in the co_grpc thread. The Executor should ideally resume the coroutine in a different context. You could process the request here, but it would diminish the asynchronous nature of the service, as co_grpc wont be able to process other requests in the background. An example executor using the [ZAB coroutine framework](https://github.com/Donald-Rupin/zab) is:
 ```c++
