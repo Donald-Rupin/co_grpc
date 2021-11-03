@@ -71,7 +71,7 @@ namespace co_grpc {
                     void
                     proceed()
                     {
-                        if (!destroy_)
+                        if (state_ != kDestory)
                         {
                             if (state_ == kNew)
                             {
