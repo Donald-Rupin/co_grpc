@@ -63,7 +63,7 @@ namespace co_grpc {
                 public:
 
                     request(grpc_service& _service)
-                        : service_(_service), next_(nullptr), destroy_(kNew)
+                        : service_(_service), next_(nullptr), state_(kNew)
                     { }
 
                     virtual ~request(){};
