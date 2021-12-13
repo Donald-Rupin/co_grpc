@@ -35,6 +35,7 @@
 #include <condition_variable>
 #include <coroutine>
 #include <deque>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string_view>
@@ -111,7 +112,8 @@ namespace co_grpc {
                     process() = 0;
 
                     virtual void
-                    error(){
+                    error()
+                    {
                         destroy();
                     };
 
@@ -153,6 +155,18 @@ namespace co_grpc {
                 grpc::ServerBuilder builder;
                 builder.AddListeningPort(_address.data(), std::forward<Creds>(cred));
                 builder.RegisterService(&service_);
+                cq_     = builder.AddCompletionQueue();
+                server_ = builder.BuildAndStart();
+            }
+
+            template <typename Creds, typename Callback>
+            void
+            build_with_access(std::string_view _address, Creds&& cred, Callback&& _cb)
+            {
+                grpc::ServerBuilder builder;
+                builder.AddListeningPort(_address.data(), std::forward<Creds>(cred));
+                builder.RegisterService(&service_);
+                _cb(builder);
                 cq_     = builder.AddCompletionQueue();
                 server_ = builder.BuildAndStart();
             }
@@ -285,10 +299,7 @@ namespace co_grpc {
             void
             queue(request* _item)
             {
-                if (!_item)
-                {
-                    return;
-                }
+                if (!_item) { return; }
 
                 auto current = writer_.load(std::memory_order_relaxed);
                 do
